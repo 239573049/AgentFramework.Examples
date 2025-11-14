@@ -13,14 +13,7 @@ var openAiClient = new OpenAIClient(new ApiKeyCredential(Env.Instance["API_KEY"]
 
 var chatClient = openAiClient.GetChatClient(Env.Instance["MODEL"]!);
 
-// 创建代理并提供工厂以将我们的自定义内存组件添加到
-// 代理创建的所有线程中。这里每个新的内存组件将有自己的
-// 用户信息对象，因此每个线程将有自己的内存。
-// 在实际应用程序/服务中，用户信息将被持久化到数据库中，
-// 并且最好在同一用户使用的多个线程之间共享，确保
-// 工厂从当前上下文中读取用户ID，并将内存组件
-// 及其存储范围限定到该用户ID。
-int maxInputToken = 64000;
+int maxInputToken = 6000;
 
 var usageStore = new UsageStore(maxInputToken);
 
@@ -91,6 +84,27 @@ Console.WriteLine(result.Text);
 
 usageStore.AddInputTokens(result.Usage?.InputTokenCount ?? 0);
 
+read = "在提供一个go的高性能冒泡排序";
+Console.WriteLine("User:");
+Console.WriteLine(read);
+result = await agent.RunAsync(read, thread);
+Console.WriteLine("AI:");
+Console.WriteLine(result.Text);
+
+
+usageStore.AddInputTokens(result.Usage?.InputTokenCount ?? 0);
+
+
+read = "然后实现一个完整的c#项目，包括基准测试";
+Console.WriteLine("User:");
+Console.WriteLine(read);
+result = await agent.RunAsync(read, thread);
+Console.WriteLine("AI:");
+Console.WriteLine(result.Text);
+
+
+usageStore.AddInputTokens(result.Usage?.InputTokenCount ?? 0);
+
 
 
 
@@ -128,7 +142,7 @@ class AutoCompress : ChatMessageStore
 
             // 保留最近的2轮对话（用户消息+助手消息）
             var recentMessages = messages.Where(m => m.Role != ChatRole.System)
-                                        .TakeLast(4) // 最近2轮（2个用户消息 + 2个助手消息）
+                                        .TakeLast(2) // 最近1轮（1个用户消息 + 1个助手消息）
                                         .ToList();
 
             // 需要压缩的消息（排除系统消息和最近的消息）
@@ -139,9 +153,9 @@ class AutoCompress : ChatMessageStore
             if (messagesToCompress.Count > 0)
             {
                 // 创建压缩提示 - 将历史消息作为上下文，用户消息包含压缩指令
-                var compressionMessages = new List<ChatMessage>(messagesToCompress);
-                
-                compressionMessages.Add(new ChatMessage(ChatRole.User, """
+                var compressionMessages = new List<ChatMessage>(messagesToCompress)
+                {
+                    new ChatMessage(ChatRole.User, """
                     Please compress the above conversation history into a concise summary.
                     
                     The summary should:
@@ -151,7 +165,8 @@ class AutoCompress : ChatMessageStore
                     4. Use concise language, not exceeding 1/3 of the original length
                     
                     Provide ONLY the summary without any additional explanations.
-                    """));
+                    """)
+                };
 
                 // 调用AI进行压缩
                 var compressionAgent = chatClient.CreateAIAgent(instructions: """
